@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PaymentGateway.API.DTOs.Responses;
 using PaymentGateway.Core.Enums;
@@ -7,6 +8,7 @@ namespace PaymentGateway.API.Controllers;
 
 [ApiController]
 [Route("api/v1/webhooks")]
+[AllowAnonymous]
 public class WebhooksController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
@@ -41,8 +43,10 @@ public class WebhooksController : ControllerBase
         if (string.IsNullOrWhiteSpace(signature))
             return BadRequest(new ErrorResponse("MISSING_SIGNATURE", "Webhook signature is required"));
 
-        using var reader = new StreamReader(Request.Body);
+        Request.EnableBuffering();
+        using var reader = new StreamReader(Request.Body, leaveOpen: true);
         var payload = await reader.ReadToEndAsync(ct);
+        Request.Body.Position = 0;
 
         _logger.LogInformation("Webhook received from {Provider}", provider);
 
