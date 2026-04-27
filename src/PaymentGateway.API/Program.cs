@@ -139,6 +139,13 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+// Apply pending EF Core migrations on startup so docker compose up works out of the box
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
+    db.Database.Migrate();
+}
+
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())

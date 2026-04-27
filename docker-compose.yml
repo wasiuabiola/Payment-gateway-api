@@ -11,23 +11,37 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=PaymentGateway;User Id=sa;Password=YourStrong@Password;TrustServerCertificate=true
       - ConnectionStrings__Redis=redis:6379
+      - Jwt__SecretKey=your-super-secret-key-at-least-32-characters-long
+      - Jwt__Issuer=payment-gateway-api
+      - Jwt__Audience=payment-gateway-clients
+      - Auth__ApiKey=dev-api-key-replace-in-production
     depends_on:
-      - sqlserver
-      - redis
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - payment-network
+    restart: on-failure
 
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       - ACCEPT_EULA=Y
       - SA_PASSWORD=YourStrong@Password
+      - MSSQL_PID=Express
     ports:
       - "1433:1433"
     volumes:
       - sqlserver-data:/var/opt/mssql
     networks:
       - payment-network
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrong@Password" -Q "SELECT 1" -b -o /dev/null -C
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
   redis:
     image: redis:7-alpine
@@ -38,6 +52,11 @@ services:
     command: redis-server --appendonly yes
     networks:
       - payment-network
+    healthcheck:
+      test: redis-cli ping
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   sqlserver-data:
