@@ -46,39 +46,36 @@ PaymentGateway.sln
 
 ## Getting Started
 
-### Prerequisites
+### Option A — Docker (recommended)
 
-- .NET 8 SDK
-- SQL Server (or Docker)
-- Redis (or Docker)
-
-### 1 — Start dependencies with Docker
+Requires Docker Desktop. Starts the API, SQL Server, and Redis with a single command. Migrations run automatically on first boot.
 
 ```bash
-docker run -d -p 6379:6379 redis
-docker run -d -p 1433:1433 -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=YourStrong@Passw0rd" mcr.microsoft.com/mssql/server:2022-latest
+docker compose up --build
 ```
 
-Update `appsettings.json` if using the Docker SQL Server:
+| Endpoint | URL |
+|---|---|
+| Swagger UI | `http://localhost:5000/swagger` |
+| Health check | `http://localhost:5000/health` |
 
-```json
-"DefaultConnection": "Server=localhost,1433;Database=PaymentGateway;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;"
-```
+### Option B — Local .NET
 
-### 2 — Apply database migrations
+**Prerequisites:** .NET 8 SDK, a running SQL Server instance, a running Redis instance.
+
+**1 — Apply database migrations**
 
 ```bash
 dotnet ef database update --project src/PaymentGateway.Infrastructure --startup-project src/PaymentGateway.API
 ```
 
-### 3 — Run the API
+**2 — Run the API**
 
 ```bash
 dotnet run --project src/PaymentGateway.API
 ```
 
-Swagger UI: `https://localhost:63349/swagger`  
-Health check: `https://localhost:63349/health`
+Swagger UI and the health check will be available on the port shown in the console output (`https://localhost:{port}/swagger`).
 
 ---
 
@@ -227,13 +224,18 @@ After 5 failed attempts the delivery is marked `DeadLetter` for manual review. C
 dotnet test tests/PaymentGateway.Tests
 ```
 
-Tests cover `PaymentService` business logic directly — not mocks testing mocks:
+**Unit tests** (`Services/`, `Domain/`, `Providers/`) — 43 tests covering:
 
-- Initiate: new reference saves transaction, duplicate throws `DuplicateTransactionException`, provider failure skips DB write
-- Verify: cache hit skips repository, successful result updates transaction + caches, unknown reference throws `TransactionNotFoundException`
-- Refund: successful transaction processes and marks as refunded, pending transaction throws `InvalidTransactionStateException`
-- Webhook: invalid signature throws, valid signature processes without error
-- Domain model: `Transaction` state transitions and event recording
+- `PaymentService`: initiation, status query, refund, webhook handling — business logic tested against mocked providers and repository
+- `Transaction` domain model: all state transitions (`BeginProcessing`, `Complete`, `Fail`, `Refund`), event recording, and invariants
+- `PaystackProvider`: HMAC-SHA512 webhook signature verification, HTTP response mapping (`success`/`failed`/`abandoned`/unknown), initiation error handling
+- `InterswitchProvider`: HMAC-SHA256 webhook signature verification, response code mapping (`00` → Successful, `Z6` → Pending, unknown → Failed)
+
+**Integration tests** (`Integration/`) — 6 tests using `WebApplicationFactory<Program>` with an InMemory database and null Redis services:
+
+- Auth enforcement: all payment and refund endpoints return `401` without a valid JWT
+- Validation: missing idempotency key and invalid request bodies return `400`
+- Routing: health check endpoint responds correctly
 
 ---
 
@@ -289,9 +291,9 @@ If Paystack returns a 5xx or the Polly circuit breaker trips open, the payment f
 
 Redis TTL-based expiry is invisible to callers: a key expires and the next request re-processes silently. I would add a `X-Idempotency-Expires-At` response header and a `GET /api/v1/idempotency/{key}` endpoint so integrators can inspect the state of a key without triggering side effects.
 
-### 8. docker-compose and GitHub Actions CI
+### 8. GitHub Actions CI Pipeline
 
-Currently developers must run SQL Server and Redis manually. I would add a `docker-compose.yml` that brings up the full stack (API + SQL Server + Redis) with a single command, and a `.github/workflows/ci.yml` that runs `dotnet test` on every PR, enforces test coverage thresholds, and publishes a Docker image on merge to `main`.
+A `.github/workflows/ci.yml` that runs on every pull request: restore → build → test with coverage thresholds → publish a Docker image to a container registry on merge to `main`. Combined with a branch protection rule requiring a green pipeline, this prevents untested code from reaching production.
 
 ### 9. PCI DSS Compliance Hardening
 
