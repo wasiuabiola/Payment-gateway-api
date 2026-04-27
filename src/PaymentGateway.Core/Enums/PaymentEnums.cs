@@ -34,9 +34,3 @@ public enum WebhookStatus
     DeadLetter
 }
 
-public enum TransactionType
-{
-    Charge,
-    Refund,
-    Transfer
-}
