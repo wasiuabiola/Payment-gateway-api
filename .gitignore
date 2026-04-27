@@ -23,7 +23,6 @@ appsettings.Staging.json
 secrets.json
 
 ## Docker
-.dockerignore
 
 ## OS
 .DS_Store

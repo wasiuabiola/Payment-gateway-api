@@ -1,0 +1,15 @@
+**/.git
+**/.gitignore
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/out
+**/.idea
+**/*.user
+**/node_modules
+**/.env
+**/coverage
+**/TestResults
+README.md
+docker-compose*.yml
